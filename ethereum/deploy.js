@@ -1,6 +1,6 @@
 const HDWalletProvider = require('truffle-hdwallet-provider');
 const Web3 = require('web3');
-const compiledGenesisContract = require('./build/Lottery.json');
+const compiledContract = require('./build/Lottery.json');
 
 const provider = new HDWalletProvider(
   'Mnemonic Passphrase',
@@ -14,9 +14,9 @@ const deploy = async () => {
   console.log('Attempting to deploy from account', accounts[0]);
 
   const result = await new web3.eth.Contract(
-    JSON.parse(compiledGenesisContract.interface)
+    JSON.parse(compiledContract.interface)
   )
-    .deploy({ data: compiledGenesisContract.bytecode })
+    .deploy({ data: compiledContract.bytecode })
     .send({ gas: '1000000', from: accounts[0] });
 
   console.log('Contract deployed to', result.options.address);

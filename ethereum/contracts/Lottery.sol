@@ -1,8 +1,6 @@
-/* Bugs to fix before deployment:
-
-*/
-
 pragma solidity ^0.4.24;
+
+// Main issues: impossible to deploy contract due to excessive gas expenditure - fixing bugs in functions to be more gas efficient
 
 // Ethereum State Lottery
 //
@@ -68,7 +66,7 @@ contract Lottery is SafeMath {
     uint public lastWinInWei = 0;
     uint public totalAmountWonInWei = 0;
     uint public totalNumberOfWins = 0;
-    address[] public players;
+    uint public players = 0;
     mapping (uint => address) public ticketToAddress;
     address[] public winners;
     mapping (address => string) public winnersType;
@@ -120,8 +118,8 @@ contract Lottery is SafeMath {
         // Increasing the ticket number
         entryTicket++;
 
-        // Adding address to players
-        players.push(entrant);
+        // Updating players count
+        players++;
 
         // Adding address to mapping
         ticketToAddress[entryTicket] = entrant;
@@ -184,9 +182,9 @@ contract Lottery is SafeMath {
                     emit callWinner(lastWinner);
                     emit mediumWin(amountWonMediumPrize);
 
-        } else {
+                    return;
 
-          if(randomNumber % smallWinOdds == 0) {
+        } else if(randomNumber % smallWinOdds == 0) {
                 // We have a WINNER !!!
 
                 // Calculate the prize money
@@ -213,16 +211,18 @@ contract Lottery is SafeMath {
                 // Call event
                 emit callWinner(lastWinner);
                 emit smallWin(amountWonSmallPrize);
-            }
+
+                return;
+
+            } else {
 
             return;
         }
     }
 
-    function () public payable {
-      jackpot = safeAdd(jackpot, safeDiv(safeMul(msg.value, 80), 100));
-      houseFee = safeAdd(houseFee, safeDiv(safeMul(msg.value, 20), 100));
-    }
+    function () public payable {}
+      // jackpot = safeAdd(jackpot, safeDiv(safeMul(msg.value, 80), 100));
+      // houseFee = safeAdd(houseFee, safeDiv(safeMul(msg.value, 20), 100));
 
     function getBalance() view public returns (uint256) {
         return address(this).balance;
@@ -248,15 +248,12 @@ contract Lottery is SafeMath {
         return totalNumberOfWins;
     }
 
-    function getPlayers() view public returns (address[]) {
+    function getNumOfPlayers() view public returns (uint256) {
         return players;
     }
 
 
     // Owner functions
-    function gethouseFee() view public onlyOwner returns (uint256) {
-        return houseFee;
-    }
 
     function stopGame() public onlyOwner {
         gameOn = false;
@@ -292,7 +289,7 @@ contract Lottery is SafeMath {
       ticketSizeRequested = uint(requestedWei);
     }
 
-    function killContract() public onlyOwner {
+    function killContract() private onlyOwner {
         selfdestruct(manager);
     }
 }
