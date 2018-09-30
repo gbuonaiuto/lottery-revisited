@@ -1,15 +1,19 @@
-// things not working:
-// Fallback function does not send eth to jackpot (80% of msg.value)
-// getLastWinAmount does not show last win amount - check if that's used for events as well?
+/* Bugs to fix before deployment:
 
+*/
 
 pragma solidity ^0.4.24;
 
-// Ethereum Lottery.
+// Ethereum State Lottery
 //
-// - 1 out of 10 chance to win half of the JACKPOT! And every 999th ticket grabs 80% of the JACKPOT!
+// A revised version lottery - more similar to a scratcher -, working with different odds for different premium sizes.
+// All of the premium sizes are more convenient (by orders of magnitude) compared to current state lotteries (also due to no taxes being levied on winnings),
+// yet the creation of an ever increasing jackpot is possible thanks to the distribution mechanisms developed in the contract, that is,
+// a part of the jackpot is never released - and thus continuously accrues to increase premium size.
 //
-// - The house fee is 1% of the ticket price, 1% reserved for transactions.
+// - 1 out of 10 chance to win 5% of the jackpot, 1 out of 100 chance to win 25% of the jackpot, 1 out of 10000 chance to win 80% of the jackpot.
+//
+// - The house fee is 1% of the ticket price, 1% reserved for gas transactions.
 //
 // - The winnings are distributed by the Smart Contract automatically.
 //
@@ -54,6 +58,7 @@ contract Lottery is SafeMath {
     // Events declaration
     event callWinner(address winnerAddress);
     event smallWin(uint wonAmount);
+    event mediumWin(uint wonAmount);
     event bigWin(uint wonAmount);
 
     // Public variables
@@ -65,10 +70,20 @@ contract Lottery is SafeMath {
     uint public totalNumberOfWins = 0;
     address[] public players;
     mapping (uint => address) public ticketToAddress;
+    address[] public winners;
+    mapping (address => string) public winnersType;
+    mapping (address => uint) public winnersAmount;
+    uint public ticketSizeRequested = 0.01 ether;
+
+    // Keep track of wins
+    uint public smallWins = 0;
+    uint public mediumWins = 0;
+    uint public bigWins = 0;
 
     // Set odds as 1 divided by Odds variable
     uint public smallWinOdds = 10;
-    uint public bigWinOdds = 100;
+    uint public mediumWinOdds = 100;
+    uint public bigWinOdds = 10000;
 
     // Internal variables
     bool private gameOn = true;
@@ -90,7 +105,7 @@ contract Lottery is SafeMath {
         require(gameOn == true);
 
         // Price of the ticket is 0.01 ETH
-        require(msg.value == 0.01 ether);
+        require(msg.value == ticketSizeRequested);
 
         // House edge + Jackpot (2% is reserved for transactions)
         jackpot = safeAdd(jackpot, safeDiv(safeMul(msg.value, 98), 100));
@@ -124,9 +139,13 @@ contract Lottery is SafeMath {
 
             // Set the statistics
             lastWinner = entrant;
-            lastWinInWei = amountWon;
+            lastWinInWei = amountWonSpecialPrize;
             totalNumberOfWins++;
             totalAmountWonInWei = safeAdd(totalAmountWonInWei, amountWonSpecialPrize);
+            bigWins++;
+            winners.push(entrant);
+            winnersType[entrant] = "Big Win";
+            winnersAmount[entrant] = amountWonSpecialPrize;
 
             // Pay the winning
             entrant.transfer(amountWonSpecialPrize);
@@ -136,31 +155,64 @@ contract Lottery is SafeMath {
             emit bigWin(amountWonSpecialPrize);
 
             return;
+
+            } else if(randomNumber % mediumWinOdds == 0) {
+                    // We have a WINNER !!!
+
+                    // Calculate the prize money
+                    uint amountWonMediumPrize = safeDiv(safeMul(jackpot, 25), 100);
+                    if(safeSub(address(this).balance, houseFee) < amountWonMediumPrize) {
+                        amountWonMediumPrize = safeDiv(safeMul(safeSub(address(this).balance, houseFee), 50), 100);
+                    }
+
+                    jackpot = safeSub(jackpot, amountWonMediumPrize);
+
+                    // Set the statistics
+                    lastWinner = entrant;
+                    lastWinInWei = amountWonMediumPrize;
+                    totalNumberOfWins++;
+                    totalAmountWonInWei = safeAdd(totalAmountWonInWei, amountWonMediumPrize);
+                    mediumWins++;
+                    winners.push(entrant);
+                    winnersType[entrant] = "Medium Win";
+                    winnersAmount[entrant] = amountWonMediumPrize;
+
+                    // Pay the winning
+                    entrant.transfer(amountWonMediumPrize);
+
+                    // Call event
+                    emit callWinner(lastWinner);
+                    emit mediumWin(amountWonMediumPrize);
+
         } else {
 
-            if(randomNumber % smallWinOdds == 0) {
+          if(randomNumber % smallWinOdds == 0) {
                 // We have a WINNER !!!
 
                 // Calculate the prize money
-                uint amountWon = safeDiv(safeMul(jackpot, 50), 100);
-                if(safeSub(address(this).balance, houseFee) < amountWon) {
-                    amountWon = safeDiv(safeMul(safeSub(address(this).balance, houseFee), 50), 100);
+                uint amountWonSmallPrize = safeDiv(safeMul(jackpot, 5), 100);
+                if(safeSub(address(this).balance, houseFee) < amountWonSmallPrize) {
+                    amountWonSmallPrize = safeDiv(safeMul(safeSub(address(this).balance, houseFee), 50), 100);
                 }
 
-                jackpot = safeSub(jackpot, amountWon);
+                jackpot = safeSub(jackpot, amountWonSmallPrize);
 
                 // Set the statistics
                 lastWinner = entrant;
-                lastWinInWei = amountWon;
+                lastWinInWei = amountWonSmallPrize;
                 totalNumberOfWins++;
-                totalAmountWonInWei = safeAdd(totalAmountWonInWei, amountWon);
+                totalAmountWonInWei = safeAdd(totalAmountWonInWei, amountWonSmallPrize);
+                smallWins++;
+                winners.push(entrant);
+                winnersType[entrant] = "Small Win";
+                winnersAmount[entrant] = amountWonSmallPrize;
 
                 // Pay the winning
-                entrant.transfer(amountWon);
+                entrant.transfer(amountWonSmallPrize);
 
                 // Call event
                 emit callWinner(lastWinner);
-                emit smallWin(amountWon);
+                emit smallWin(amountWonSmallPrize);
             }
 
             return;
@@ -168,8 +220,8 @@ contract Lottery is SafeMath {
     }
 
     function () public payable {
-      houseFee = safeAdd(houseFee, safeDiv(safeMul(msg.value, 20), 100));
       jackpot = safeAdd(jackpot, safeDiv(safeMul(msg.value, 80), 100));
+      houseFee = safeAdd(houseFee, safeDiv(safeMul(msg.value, 20), 100));
     }
 
     function getBalance() view public returns (uint256) {
@@ -228,8 +280,16 @@ contract Lottery is SafeMath {
       smallWinOdds = smallOdds;
     }
 
+    function setMediumWinOdds(uint mediumOdds) public onlyOwner {
+      mediumWinOdds = mediumOdds;
+    }
+
     function setBigWinOdds(uint bigOdds) public onlyOwner {
       bigWinOdds = bigOdds;
+    }
+
+    function seTicketSizeRequested(uint requestedWei) public {
+      ticketSizeRequested = uint(requestedWei);
     }
 
     function killContract() public onlyOwner {
